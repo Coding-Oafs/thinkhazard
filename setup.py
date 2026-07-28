@@ -58,6 +58,7 @@ setup(
             "import_further_resources = thinkhazard.scripts.import_further_resources:main",
             "import_contacts = thinkhazard.processing.imports:ContactsImporter.run",
             "import_l10n = thinkhazard.processing.import_l10n:L10nImporter.run",
+            "import_thinkhazard = thinkhazard.processing.import_thinkhazard:ThinkhazardImporter.run",
             "publish = thinkhazard.processing.publish:Publisher.run",
         ],
         "lingva.extractors": [
