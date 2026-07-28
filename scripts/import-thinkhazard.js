@@ -29,8 +29,15 @@ if (inputIndex === -1 || inputIndex >= args.length - 1) {
 const inputPath = args[inputIndex + 1];
 const absoluteInput = path.resolve(inputPath);
 
-if (!fs.existsSync(absoluteInput)) {
+let inputStat;
+try {
+  inputStat = fs.statSync(absoluteInput);
+} catch {
   console.error(`Error: input file not found: ${absoluteInput}`);
+  process.exit(1);
+}
+if (!inputStat.isFile()) {
+  console.error(`Error: input path is not a regular file: ${absoluteInput}`);
   process.exit(1);
 }
 
