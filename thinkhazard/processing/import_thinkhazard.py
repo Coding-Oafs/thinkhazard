@@ -31,6 +31,8 @@ from thinkhazard.models import (
 
 LOG = logging.getLogger(__name__)
 
+_BULK_INSERT_CHUNK_SIZE = 5000
+
 
 class ThinkhazardImporter(BaseProcessor):
     """Imports hazard-level assignments exported via the admin
@@ -174,9 +176,8 @@ class ThinkhazardImporter(BaseProcessor):
                     )
 
         # Bulk-insert all new associations in chunks to minimise round-trips.
-        chunk_size = 5000
-        for i in range(0, len(new_associations), chunk_size):
-            chunk = new_associations[i : i + chunk_size]
+        for i in range(0, len(new_associations), _BULK_INSERT_CHUNK_SIZE):
+            chunk = new_associations[i : i + _BULK_INSERT_CHUNK_SIZE]
             self.dbsession.bulk_save_objects(chunk, return_defaults=False)
             self.dbsession.flush()
 
