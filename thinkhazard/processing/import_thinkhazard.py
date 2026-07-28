@@ -64,7 +64,7 @@ class ThinkhazardImporter(BaseProcessor):
         # avoid one DB round-trip per CSV row.  The table typically holds
         # O(200 000) rows for a global ADM2 dataset; the in-memory footprint
         # is acceptable for a batch import process.
-        division_cache: dict = {
+        division_cache: dict[int, AdministrativeDivision] = {
             d.id: d
             for d in self.dbsession.query(AdministrativeDivision).all()
         }
@@ -74,7 +74,7 @@ class ThinkhazardImporter(BaseProcessor):
         # num_divisions × num_hazard_types rows (e.g. ~3 M for a full global
         # ADM2 × 15-hazard-type dataset); storing only the two integer ids per
         # row keeps memory usage manageable for a batch import process.
-        existing_associations: set = {
+        existing_associations: set[tuple[int, int]] = {
             (a.administrativedivision_id, a.hazardcategory_id)
             for a in self.dbsession.query(
                 HazardCategoryAdministrativeDivisionAssociation
@@ -83,7 +83,7 @@ class ThinkhazardImporter(BaseProcessor):
 
         # Local cache for HazardCategory lookups; there are only O(types×levels)
         # unique combinations so this stays very small.
-        hazard_category_cache: dict = {}
+        hazard_category_cache: dict[tuple[str, str], HazardCategory | None] = {}
 
         new_associations = []
 
