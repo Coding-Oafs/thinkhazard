@@ -60,6 +60,28 @@ class ThinkhazardImporter(BaseProcessor):
         imported = 0
         skipped = 0
 
+        # Pre-load all administrative divisions into a cache keyed by id to
+        # avoid one DB round-trip per CSV row.
+        division_cache: dict = {
+            d.id: d
+            for d in self.dbsession.query(AdministrativeDivision).all()
+        }
+
+        # Pre-load existing associations into a set so duplicate checks do not
+        # require a per-row query.
+        existing_associations: set = {
+            (a.administrativedivision_id, a.hazardcategory_id)
+            for a in self.dbsession.query(
+                HazardCategoryAdministrativeDivisionAssociation
+            ).all()
+        }
+
+        # Local cache for HazardCategory lookups; there are only O(types×levels)
+        # unique combinations so this stays very small.
+        hazard_category_cache: dict = {}
+
+        new_associations = []
+
         with open(input, newline="", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
@@ -82,11 +104,7 @@ class ThinkhazardImporter(BaseProcessor):
                     skipped += 1
                     continue
 
-                division = (
-                    self.dbsession.query(AdministrativeDivision)
-                    .filter(AdministrativeDivision.id == admin_id_int)
-                    .one_or_none()
-                )
+                division = division_cache.get(admin_id_int)
                 if division is None:
                     LOG.warning(
                         "AdministrativeDivision with id=%s not found, skipping.",
@@ -111,9 +129,12 @@ class ThinkhazardImporter(BaseProcessor):
                     skipped += 1
                     continue
 
-                hazardcategory = HazardCategory.get(
-                    self.dbsession, hazardtype_mnemonic, hazardlevel_mnemonic
-                )
+                cache_key = (hazardtype_mnemonic, hazardlevel_mnemonic)
+                if cache_key not in hazard_category_cache:
+                    hazard_category_cache[cache_key] = HazardCategory.get(
+                        self.dbsession, hazardtype_mnemonic, hazardlevel_mnemonic
+                    )
+                hazardcategory = hazard_category_cache[cache_key]
                 if hazardcategory is None:
                     LOG.warning(
                         "HazardCategory (%s/%s) not found, skipping.",
@@ -123,21 +144,15 @@ class ThinkhazardImporter(BaseProcessor):
                     skipped += 1
                     continue
 
-                # Check for an existing association and update, or create new
-                existing = (
-                    self.dbsession.query(HazardCategoryAdministrativeDivisionAssociation)
-                    .filter_by(
-                        administrativedivision_id=division.id,
-                        hazardcategory_id=hazardcategory.id,
+                assoc_key = (division.id, hazardcategory.id)
+                if assoc_key not in existing_associations:
+                    new_associations.append(
+                        HazardCategoryAdministrativeDivisionAssociation(
+                            administrativedivision_id=division.id,
+                            hazardcategory_id=hazardcategory.id,
+                        )
                     )
-                    .one_or_none()
-                )
-                if existing is None:
-                    association = HazardCategoryAdministrativeDivisionAssociation(
-                        administrativedivision_id=division.id,
-                        hazardcategory_id=hazardcategory.id,
-                    )
-                    self.dbsession.add(association)
+                    existing_associations.add(assoc_key)
                     LOG.debug(
                         "Created association: division=%s hazard=%s/%s",
                         admin_id,
@@ -152,6 +167,13 @@ class ThinkhazardImporter(BaseProcessor):
                         hazardtype_mnemonic,
                         hazardlevel_mnemonic,
                     )
+
+        # Bulk-insert all new associations in chunks to minimise round-trips.
+        chunk_size = 5000
+        for i in range(0, len(new_associations), chunk_size):
+            chunk = new_associations[i : i + chunk_size]
+            self.dbsession.bulk_save_objects(chunk, return_defaults=False)
+            self.dbsession.flush()
 
         LOG.info(
             "Import complete: %d rows imported, %d rows skipped.", imported, skipped
