@@ -72,9 +72,19 @@ class ThinkhazardImporter(BaseProcessor):
                     skipped += 1
                     continue
 
+                try:
+                    admin_id_int = int(admin_id)
+                except ValueError:
+                    LOG.warning(
+                        "Invalid admin division id '%s' (expected integer), skipping.",
+                        admin_id,
+                    )
+                    skipped += 1
+                    continue
+
                 division = (
                     self.dbsession.query(AdministrativeDivision)
-                    .filter(AdministrativeDivision.id == int(admin_id))
+                    .filter(AdministrativeDivision.id == admin_id_int)
                     .one_or_none()
                 )
                 if division is None:
@@ -134,8 +144,14 @@ class ThinkhazardImporter(BaseProcessor):
                         hazardtype_mnemonic,
                         hazardlevel_mnemonic,
                     )
-
-                imported += 1
+                    imported += 1
+                else:
+                    LOG.debug(
+                        "Association already exists: division=%s hazard=%s/%s, skipping.",
+                        admin_id,
+                        hazardtype_mnemonic,
+                        hazardlevel_mnemonic,
+                    )
 
         LOG.info(
             "Import complete: %d rows imported, %d rows skipped.", imported, skipped
