@@ -176,10 +176,11 @@ class ThinkhazardImporter(BaseProcessor):
                     )
 
         # Bulk-insert all new associations in chunks to minimise round-trips.
-        for i in range(0, len(new_associations), _BULK_INSERT_CHUNK_SIZE):
-            chunk = new_associations[i : i + _BULK_INSERT_CHUNK_SIZE]
-            self.dbsession.bulk_save_objects(chunk, return_defaults=False)
-            self.dbsession.flush()
+        if new_associations:
+            for i in range(0, len(new_associations), _BULK_INSERT_CHUNK_SIZE):
+                chunk = new_associations[i : i + _BULK_INSERT_CHUNK_SIZE]
+                self.dbsession.bulk_save_objects(chunk, return_defaults=False)
+                self.dbsession.flush()
 
         LOG.info(
             "Import complete: %d rows imported, %d rows skipped.", imported, skipped
